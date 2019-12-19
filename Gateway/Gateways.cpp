@@ -104,7 +104,10 @@ int main(int argc, char* argv[])
 
 	printf("Version is %f\n", version);
 
+	// Set IP of MQTT Broker as hostname
 	const char* hostname = "52.14.169.245";
+
+	// Set Port of MQTT Broker as port
 	int port = 1883;
 	printf("Connecting to %s:%d\n", hostname, port);
 	int rc = ipstack.connect(hostname, port);
