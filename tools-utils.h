@@ -34,7 +34,28 @@
 #define TOOLS_UTILS
 
 #include <termios.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <termios.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/time.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <signal.h>
 
+#include <stdarg.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <stdlib.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+
+#include<pthread.h>
 /* The unspecified baudrate */
 #define BUNKNOWN -2
 
@@ -81,4 +102,13 @@ speed_t select_baudrate(int baudrate);
 bool InitSerialPort();
 int SerialCommand(char * command, char * reply);
 
+int InitLog();
+int stringlog(const char *buf, int len,...);
+
+char *rand_str(char *dst, int size);
+enum{
+    SUCCESS,
+    FAILEDONACCESS,
+    FAILEDONREADWRITE
+};
 #endif /* TOOLS_UTILS */

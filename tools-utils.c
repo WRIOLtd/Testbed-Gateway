@@ -32,17 +32,6 @@
 
 #include "tools-utils.h"
 
-#include <stdio.h>
-#include <fcntl.h>
-#include <termios.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/time.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#include <signal.h>
-
 
 /*---------------------------------------------------------------------------*/
 #define BAUDRATE B115200
@@ -63,7 +52,7 @@ speed_t b_rate = BAUDRATE;
 
 #define CSNA_INIT     0x01
 
-#define BUFSIZE         40
+#define BUFSIZE         500
 #define HCOLS           20
 #define ICOLS           18
 
@@ -87,7 +76,7 @@ static unsigned char rxbuf[2048];
 	static void
 intHandler(int sig)
 {
-	exit(0);
+	//exit(0);
 }
 /*---------------------------------------------------------------------------*/
 
@@ -97,7 +86,7 @@ int fd;
 unsigned char serialbuf[BUFSIZE];
 int nfound;
 
-
+long logfilecount=0;
 
 
 
@@ -230,6 +219,7 @@ select_baudrate(int baudrate) {
   }
 }
 
+pthread_mutex_t serial_mutex;
 
 bool InitSerialPort(){
 	signal(SIGINT, intHandler);
@@ -297,7 +287,7 @@ bool InitSerialPort(){
 
 	if(tcsetattr(fd, TCSANOW, &options) < 0) {
 		perror("could not set options");
-		exit(-1);
+		//exit(-1);
 	}
 
 	FD_ZERO(&mask);
@@ -308,12 +298,13 @@ bool InitSerialPort(){
 	return true;
 }
 
-int SerialCommand(char * command, char * reply){
+int SerialCommand(char * command, char * reply){	
+	pthread_mutex_lock( &serial_mutex );
 	if(InitSerialPort()){
 		//smask = mask;
 
 		if(strlen(command) > 0) {
-
+			
 			int i;
 			char c;
 			memset(serialbuf,0,sizeof(BUFSIZE));
@@ -340,10 +331,10 @@ int SerialCommand(char * command, char * reply){
 				usleep(6000);
 			}
 		}
-
+		sleep(1);
 		memset(serialbuf,0,sizeof(BUFSIZE));
-		if(1/*FD_ISSET(fd, &smask)*/) {
-			int i, n = read(fd, serialbuf, sizeof(serialbuf));
+		if(1/*FD_ISSET(fd, &smask)*/) {			
+			int i, n = read(fd, serialbuf, sizeof(serialbuf));			
 			if(n < 0) {
 				perror("could not read");
 				//exit(-1);
@@ -360,4 +351,107 @@ int SerialCommand(char * command, char * reply){
 		}
 		close(fd);
 	}
+	else{
+		pthread_mutex_unlock( &serial_mutex );
+		return FAILEDONACCESS;
+	}
+	pthread_mutex_unlock( &serial_mutex );
 }
+
+int fileExist(const char * pathname)
+{
+        struct stat st = {0};
+        if (stat((char *)pathname, &st) != -1) {
+                return 1;
+        }
+        else
+                return 0;
+
+}
+
+unsigned get_file_size (const char * file_name)
+{
+	struct stat sb;
+	if (stat (file_name, & sb) != 0) {
+		fprintf (stderr, "'stat' failed for '%s': %s.\n",
+				file_name, strerror (errno));
+		//exit (EXIT_FAILURE);
+		return 0;
+	}
+	//DEBUG_PRINT(("yas %d: file_size=%ld func=%s, file=%s\n",__LINE__,sb.st_size,__FUNCTION__,__FILE__));
+	return sb.st_size;
+}
+
+int InitLog(){
+	pthread_mutex_init(&serial_mutex, NULL);
+	if (!fileExist("/opt/gateway_logs"))
+        mkdir("/opt/gateway_logs", 0755);
+}
+
+int stringlog(const char *buf, int len,...){   
+	if(1){
+	char logbuf[1000];
+	FILE * log_f;
+	va_list arg;
+	va_start(arg,buf);
+	vsprintf(logbuf,buf,arg);
+	va_end(arg);
+	//sendto(loggerfd, logbuf, strlen(logbuf), 0,(struct sockaddr *) &loggeraddr, (unsigned)sizeof(loggeraddr));
+		char timestamp[50];
+		char logfilename[50];
+		//mkdir("/mnt/sd/gateway_logs", 0755);
+
+		if (fileExist("/opt/gateway_logs")) {
+		time_t t;
+		struct tm tm;
+
+		
+		sprintf(logfilename, "/opt/gateway_logs/Gateway%ld.log",logfilecount);
+		t = time(NULL);
+
+		tm = *localtime(&t);
+		sprintf(timestamp,"%d-%d-%d %d:%d:%d :-", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+		do{
+
+		if( access( logfilename, F_OK ) != -1 ){ // if file exist 
+
+			if( get_file_size (logfilename)>90000){
+				do{
+					sprintf(logfilename, "/opt/gateway_logs/Gateway%ld.log",logfilecount++);
+				}while(access( logfilename, F_OK ) != -1);
+				log_f = fopen (logfilename,"wb");
+			}
+			else
+				log_f = fopen (logfilename,"ab");
+		}
+		else
+			log_f = fopen (logfilename,"wb");
+		}while(log_f == NULL);
+
+		if(len==0){
+			len=strlen(logbuf);
+		}
+
+		fwrite(timestamp, 1, strlen(timestamp), log_f);
+		fwrite(logbuf, 1, len, log_f);
+		fwrite("\n", 1, 1, log_f);
+		fclose(log_f);
+		}
+	}
+}
+
+
+char *rand_str(char *dst, int size)
+{
+   static const char text[] = "abcdefghijklmnopqrstuvwxyz"
+                              "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+   int i, len = rand() % (size - 1);
+   for ( i = 0; i < len; ++i )
+   {
+      dst[i] = text[rand() % (sizeof text - 1)];
+   }
+   dst[i] = '\0';
+   return dst;
+}
+
